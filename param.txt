@@ -1,0 +1,16 @@
+algorithm = EFIS-MOEA
+
+inputData = "./data/file-tra.dat" "./data/file-tra.dat" "./data/file-tst.dat"
+outputData = "./output.tra" "./output.tst" 
+
+seed = 12345678
+population size = 60
+number of generations = 6000
+crossover probability = 0.8
+mutation probability = 0.025
+SOLUTION = AUC_VAL
+INSTANCES = ALL
+ENSEMBLE = TRUE
+MODEL = TRUE
+
+
