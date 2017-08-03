@@ -36,6 +36,7 @@ import org.core.*;
 import keel.Algorithms.Decision_Trees.C45.C45;
 import java.util.StringTokenizer;
 import java.util.ArrayList;
+import java.util.Collections;
 
 public class Wrapper {
 
@@ -45,8 +46,9 @@ public class Wrapper {
 	public static String header;
 	int confusionMatrix[][], indexBest, fitness;
 	double crossover,mutation;
-	boolean ensemble, model;
+	boolean ensemble, model, weighting;
 	ArrayList <C45> models;
+	ArrayList <AUC> aucList;
 	private double [] aprioriClassDistribution;
 	private double [] weightsAUC;
 
@@ -129,6 +131,9 @@ public class Wrapper {
 		ensemble = aux2.equalsIgnoreCase("true");
 
 		aux2 = parameters.getParameter(param++);
+		this.weighting = aux2.equalsIgnoreCase("true");
+		
+		aux2 = parameters.getParameter(param++);
 		model = aux2.equalsIgnoreCase("true");
 
 		header = parameters.getTestInputFile();
@@ -161,7 +166,7 @@ public class Wrapper {
 			}
 
 			if (model){ //the model is not previously generated in a file 
-				NSGA2 search = new NSGA2(train,seed,populationSize,maxTrials,crossover,mutation,instances,fitness);
+				NSGA2 search = new NSGA2(train,seed,populationSize,maxTrials,crossover,mutation,instances,fitness,weighting);
 				try{
 					search.execute();
 				}catch(Exception e){
@@ -188,21 +193,89 @@ public class Wrapper {
 	}
 
 	private double getAUC(myDataset data){
-		for (int i = 0; i < this.confusionMatrix.length; i++){
-			if (data.numberInstances(i) > 0){
-				double tp = 1.0*confusionMatrix[i][i]/data.numberInstances(i);
-				for (int j = 0; j < this.confusionMatrix[i].length; j++){
-					if ((j != i)&&(data.numberInstances(j) > 0)){
-						double fp = 1.0*this.confusionMatrix[j][i]/data.numberInstances(j);
+		Collections.sort(aucList); //order by positive prediction
+		int totalClasses = data.getnClasses();
+		double [][] aucOk = new double[totalClasses][totalClasses]; 
+		double [] tprOk = new double[totalClasses];
+		double [][] fprOk = new double[totalClasses][totalClasses];
+		double [] tprNew = new double[totalClasses];
+		double [][] fprNew = new double[totalClasses][totalClasses];
+		double [] tprPrev = new double[totalClasses];
+		double [][] fprPrev = new double[totalClasses][totalClasses];
+		double pPrev = 0; 
+		
+		//Test
+		for (int i = 0; i < aucList.size(); i++){
+			double pAct = aucList.get(i).getPpos();
+			if(pAct != pPrev){
+				for (int j = 0; j < totalClasses; j++){
+					if (data.numberInstances(j) > 0){
+						tprNew[j] = tprOk[j]/data.numberInstances(j);
+						for (int k = 0; k < totalClasses; k++){
+							if ((data.numberInstances(k) > 0)&&(j!=k)){
+								fprNew[j][k] = fprOk[j][k]/data.numberInstances(k);
+								aucOk[j][k] += (tprPrev[j]+tprNew[j])*(fprNew[j][k]-fprPrev[j][k])/2.0;
+								tprPrev[j] = tprNew[j];
+								fprPrev[j][k] = fprNew[j][k];
+							}
+						}
+					}	
+				}
+				pPrev = pAct;
+			}
+			if(aucList.get(i).getActCl() == aucList.get(i).getPrCl())
+				tprOk[aucList.get(i).getPrCl()]++;
+			else
+				fprOk[aucList.get(i).getPrCl()][aucList.get(i).getActCl()]++;
+		}
+
+		for (int j = 0; j < totalClasses; j++){
+			if (data.numberInstances(j) > 0){
+				tprNew[j] = tprOk[j]/data.numberInstances(j);
+				for (int k = 0; k < totalClasses; k++){
+					if ((data.numberInstances(k) > 0)&&(j!=k)){
+						fprNew[j][k] = fprOk[j][k]/data.numberInstances(k);
+						aucOk[j][k] += (tprPrev[j]+tprNew[j])*(fprNew[j][k]-fprPrev[j][k])/2.0;
+						aucOk[j][k] += (tprNew[j]+1)*(1-fprNew[j][k])/2.0;
+					}
+				}
+			}	
+		}
+
+		double aucFinal = 0;
+		int classesSuma = 0;
+		for (int j = 0; j < totalClasses; j++){
+			if (data.numberInstances(j) > 0){
+				for (int k = 0; k < totalClasses; k++){
+					if ((data.numberInstances(k) > 0)&&(j!=k)){
+						classesSuma++;
+						aucFinal += aucOk[j][k];
 					}
 				}
 			}
 		}
-
-		double tpr = 1.0*confusionMatrix[0][0]/data.numberInstances(0);
-		double fpr = 1.0*confusionMatrix[1][0]/data.numberInstances(1);
-		double auc1 = ((1+tpr-fpr)/2.0);
-		return auc1;
+		
+		return (aucFinal/classesSuma);
+	}
+	
+	private double getAUC_OnePoint(myDataset data){
+		double auc = 0;
+		int totalClasses = 0;
+		for (int i = 0; i < this.confusionMatrix.length; i++){
+			if (data.numberInstances(i) > 0){
+				totalClasses++;
+				double tp = 1.0*confusionMatrix[i][i]/data.numberInstances(i);
+				for (int j = 0; j < this.confusionMatrix[i].length; j++){
+					if ((j != i)&&(data.numberInstances(j) > 0)){
+						double fp = 1.0*this.confusionMatrix[j][i]/data.numberInstances(j);
+						double auc_j = (tp - fp + 1)/2.0;
+						auc += auc_j;
+					}
+				}
+			}
+		}		
+		double auc2 = (auc/(totalClasses*(totalClasses-1)));
+		return auc2;
 	}
 
 	private String printConfusionMatrix(){
@@ -275,16 +348,18 @@ public class Wrapper {
 				if (ejemplos[l]) ejs++;
 			}
 			try{
-				C45 model = new C45(train,val,test,variables,ejemplos);
+				C45 model = new C45(train,val,test,variables,ejemplos, weighting);
 
 				/***********/
 				//double fit = model.getAUCTr();
+				model.evaluateTrain();
 				double auc_tr = model.getAUCTr();
 				if (auc_tr > max_auc){
 					max_auc = auc_tr;
 					indexBest = j;
 				}
 				this.weightsAUC[j] = auc_tr;
+				model.evaluateTest();
 				double auc_tst = model.getAUC();
 				System.out.println("Solution["+j+"]:\t"+vars+"\t"+ejs+"\t"+auc_tr+"\t"+auc_tst);
 
@@ -314,12 +389,16 @@ public class Wrapper {
 	private double doOutput(myDataset dataset, String filename, boolean test) {
 		String output = new String("");
 		confusionMatrix = new int[dataset.getnClasses()][dataset.getnClasses()];
-
+		aucList = new ArrayList<AUC>();
+		
 		output = dataset.copyHeader(); //we insert the header in the output file
 		//We write the output for each example
 		for (int i = 0; i < dataset.getnData(); i++) {
 			String clReal = dataset.getOutputAsString(i);
-			String clPred = classificationOutput(i,test);
+			double [] votes = classificationOutput(i,test);
+			int index = getOutputTies(votes);
+			String clPred = train.getOutputValue(index);
+			aucList.add(new AUC(votes[index],dataset.numericClass(clPred),dataset.getOutputAsInteger(i)));
 			confusionMatrix[dataset.getOutputAsInteger(i)][dataset.numericClass(clPred)]++;
 			output +=  clReal+ " " + clPred + "\n";
 		}
@@ -345,8 +424,8 @@ public class Wrapper {
 	 * @param example double[] The input example
 	 * @return String the output generated by the algorithm
 	 */
-	private String classificationOutput(int index, boolean test) {
-		String output = new String("?");
+	private double [] classificationOutput(int index, boolean test) {
+		//String output = new String("?");
 		/**
           Here we should include the algorithm directives to generate the
           classification output from the input example
@@ -391,17 +470,18 @@ public class Wrapper {
 				}
 			}
 		}else{ //best solution
-			double [] probs = new double[train.getnClasses()];
+			//double [] probs = new double[train.getnClasses()];
 			if (test){
 				votes[models.get(indexBest).classifyTest(index)]++;
 			}else{
 				votes[models.get(indexBest).classifyTrain(index)]++;
 			}
 		}
-		return getOutputTies(votes);
+		//return getOutputTies(votes);
+		return votes;
 	}
 
-	String getOutputTies(double[] max) {
+	int getOutputTies(double[] max) {
 		/*
 		 * Tie-breaking step 1: Find out which classes gain the maximum score
 		 */
@@ -444,12 +524,13 @@ public class Wrapper {
 					tieValues++;
 				}
 			}
-			return train.getOutputValue(stillTying[Randomize.RandintClosed(0, tieValues-1)]);
+			//return train.getOutputValue(stillTying[Randomize.RandintClosed(0, tieValues-1)]);
+			return stillTying[Randomize.RandintClosed(0, tieValues-1)];
 		}
-		return train.getOutputValue(maxIndex(max));
+		return maxIndex(max);
 	}
 
-	private int maxIndex(int[] array) {
+	static private int maxIndex(int[] array) {
 		int max = array[0];
 		int index = 0;
 		for (int i = 1; i < array.length; i++) {
@@ -461,7 +542,7 @@ public class Wrapper {
 		return index;
 	}
 
-	private int maxIndex(double [] array) {
+	static private int maxIndex(double [] array) {
 		double max = array[0];
 		int index = 0;
 		for (int i = 1; i < array.length; i++) {

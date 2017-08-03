@@ -30,8 +30,12 @@
 package keel.Algorithms.Decision_Trees.C45;
 
 import java.io.*;
+
+import wrapper.AUC;
 import wrapper.myDataset;
 import java.math.*;
+import java.util.ArrayList;
+import java.util.Collections;
 
 
 /**
@@ -71,27 +75,31 @@ public class C45 extends Algorithm {
 
 	private int tp,tn,fp,fn;
 	private int [][] confusionMatrixTr, confusionMatrixTst, confusionMatrixModel;
+	private ArrayList<AUC> aucList;
 
-	public C45(myDataset train, boolean variables[], boolean ejemplos[]) throws Exception {
+	public C45(myDataset train, boolean variables[], boolean ejemplos[], boolean weighting) throws Exception {
 		try {
 			modelDataset = new Dataset(train, variables, ejemplos);
 			trainDataset = new Dataset(train, variables);
 			testDataset = new Dataset(train, variables);
 			priorsProbabilities = new double[modelDataset.numClasses()];
 			priorsProbabilities();
+			if (weighting){
+				modelDataset.setWeights(priorsProbabilities);
+			}
 			marginCounts = new double[marginResolution + 1];
 
 			// generate the tree
 			generateTree(modelDataset);
-			evaluateTest();
-			evaluateModel();
+			//evaluateTest();
+			//evaluateModel();
 		} catch (Exception e) {
 			e.printStackTrace(System.err);;
 			System.exit( -1);
 		}
 	}
 
-	public C45(myDataset train, myDataset val, myDataset test, boolean variables[], boolean ejemplos[]) throws Exception {
+	public C45(myDataset train, myDataset val, myDataset test, boolean variables[], boolean ejemplos[], boolean weighting) throws Exception {
 		try {
 			modelDataset = new Dataset(train, variables, ejemplos);
 			trainDataset = new Dataset(val, variables);
@@ -99,14 +107,15 @@ public class C45 extends Algorithm {
 
 			priorsProbabilities = new double[modelDataset.numClasses()];
 			priorsProbabilities();
+			if (weighting){
+				modelDataset.setWeights(priorsProbabilities);
+			}
 			marginCounts = new double[marginResolution + 1];
 			// generate the tree
 			generateTree(modelDataset);
-			evaluateTest();
-			evaluateTrain();
-			evaluateModel();
-			evaluateTrain();
-
+			//evaluateTest();
+			//evaluateTrain();
+			//evaluateModel();
 		} catch (Exception e) {
 			System.err.println("Something is wrong (Generate Final Model) "+e.toString());
 			System.exit( -1);
@@ -146,19 +155,19 @@ public class C45 extends Algorithm {
 	 *
 	 * @return				The index of the class index predicted.
 	 */
-	public double evaluateItemset(Itemset itemset) throws Exception {
+	public double [] evaluateItemset(Itemset itemset) throws Exception {
 		Itemset classMissing = (Itemset) itemset.copy();
 		double prediction = 0;
 		classMissing.setDataset(itemset.getDataset());
 		classMissing.setClassMissing();
 
 		double[] classification = classificationForItemset(classMissing);
-		prediction = maxIndex(classification);
 		updateStats(classification, itemset, itemset.numClasses());
-
+		return classification;
+		
+		//prediction = maxIndex(classification);
 		//itemset.setPredictedValue( prediction );
-
-		return prediction;
+		//return prediction;
 	}
 
 	/** Updates all the statistics for the current itemset.
@@ -191,11 +200,13 @@ public class C45 extends Algorithm {
 				return;
 			}
 
+			/*
 			double predictedProb = Math.max(Double.MIN_VALUE,
 					predictedClassification[actualClass]);
 			double priorProb = Math.max(Double.MIN_VALUE,
 					priorsProbabilities[actualClass] /
 					classPriorsSum);
+					*/
 		}
 	}
 
@@ -356,7 +367,8 @@ public class C45 extends Algorithm {
 		int cl = 0;
 		try {
 			Itemset itemset = trainDataset.itemset(index);
-			cl = (int) evaluateItemset(itemset);
+			double [] classification = evaluateItemset(itemset);
+			cl = (int) maxIndex(classification);
 		}catch (Exception e) {
 			System.err.println(e.getMessage());
 		}
@@ -367,7 +379,8 @@ public class C45 extends Algorithm {
 		int cl = 0;
 		try {
 			Itemset itemset = testDataset.itemset(index);
-			cl = (int) evaluateItemset(itemset);
+			double [] classification = evaluateItemset(itemset);
+			cl = (int) maxIndex(classification);
 		}catch (Exception e) {
 			System.err.println(e.getMessage());
 		}
@@ -407,7 +420,8 @@ public class C45 extends Algorithm {
 		for (int i = 0; i < trainDataset.numItemsets(); i++) {
 			try {
 				Itemset itemset = trainDataset.itemset(i);
-				int cl = (int) evaluateItemset(itemset);
+				double [] classification = evaluateItemset(itemset);
+				int cl = (int) maxIndex(classification);
 
 				confusionMatrixTr[(int)itemset.getValue(trainDataset.getClassIndex())][cl]++;
 				if (cl == (int) itemset.getValue(trainDataset.getClassIndex())) {
@@ -449,8 +463,10 @@ public class C45 extends Algorithm {
 
 		for (int i = 0; i < testDataset.numItemsets(); i++) {
 			try {
-				int cl = (int) evaluateItemset(testDataset.itemset(i));
 				Itemset itemset = testDataset.itemset(i);
+				double [] classification = evaluateItemset(itemset);
+				int cl = (int) maxIndex(classification);
+				
 				confusionMatrixTst[(int)itemset.getValue(testDataset.getClassIndex())][cl]++;
 				if (cl == (int) itemset.getValue(testDataset.getClassIndex())) {
 					testCorrect++;
@@ -486,13 +502,15 @@ public class C45 extends Algorithm {
 	public void evaluateTest() {
 
 		confusionMatrixTst = new int[testDataset.itemset(0).numClasses()][testDataset.itemset(0).numClasses()];
-
+		aucList = new ArrayList<AUC>();
 		for (int i = 0; i < testDataset.numItemsets(); i++) {
 			try {
-				int cl = (int) evaluateItemset(testDataset.itemset(i));
 				Itemset itemset = testDataset.itemset(i);
+				double [] classification = evaluateItemset(itemset);
+				int cl = (int) maxIndex(classification);
 
 				confusionMatrixTst[(int)itemset.getValue(testDataset.getClassIndex())][cl]++;
+				aucList.add(new AUC(classification[cl],cl,(int)itemset.getValue(testDataset.getClassIndex())));
 			} catch (Exception e) {
 				System.err.println(e.getMessage());
 			}
@@ -506,12 +524,14 @@ public class C45 extends Algorithm {
 	 */
 	public void evaluateModel() {
 		confusionMatrixModel = new int[modelDataset.itemset(0).numClasses()][modelDataset.itemset(0).numClasses()];
+		aucList = new ArrayList<AUC>();
 		for (int i = 0; i < modelDataset.numItemsets(); i++) {
 			try {
-				int cl = (int) evaluateItemset(modelDataset.itemset(i));
 				Itemset itemset = modelDataset.itemset(i);
+				double [] classification = evaluateItemset(itemset);
+				int cl = (int) maxIndex(classification);
 				confusionMatrixModel[(int)itemset.getValue(modelDataset.getClassIndex())][cl]++;
-
+				aucList.add(new AUC(classification[cl],cl,(int)itemset.getValue(modelDataset.getClassIndex())));
 			} catch (Exception e) {
 				System.err.println(e.getMessage());
 			}
@@ -524,20 +544,100 @@ public class C45 extends Algorithm {
 	 */
 	public void evaluateTrain() {
 		confusionMatrixTr = new int[trainDataset.itemset(0).numClasses()][trainDataset.itemset(0).numClasses()];
+		aucList = new ArrayList<AUC>();
 		for (int i = 0; i < trainDataset.numItemsets(); i++) {
 			try {
-				int cl = (int) evaluateItemset(trainDataset.itemset(i));
 				Itemset itemset = trainDataset.itemset(i);
+				double [] classification = evaluateItemset(itemset);
+				int cl = (int) maxIndex(classification);
 				confusionMatrixTr[(int)itemset.getValue(trainDataset.getClassIndex())][cl]++;
-
+				aucList.add(new AUC(classification[cl],cl,(int)itemset.getValue(trainDataset.getClassIndex())));
 			} catch (Exception e) {
 				System.err.println(e.getMessage());
 			}
 		}
 	}
 
-
+	//¿¿¿¿¿¿¿
 	public double getAUC(){
+		return getAUC_Global(testDataset);
+	}
+	
+	public double getAUCModel(){
+		return getAUC_Global(modelDataset);
+	}
+	
+	public double getAUCTr(){
+		return getAUC_Global(trainDataset);
+	}
+
+	public double getAUC_Global(Dataset dataset){
+		Collections.sort(aucList); //order by positive prediction
+		int totalClasses = dataset.numClasses();
+		double [][] aucOk = new double[totalClasses][totalClasses]; 
+		double [] tprOk = new double[totalClasses];
+		double [][] fprOk = new double[totalClasses][totalClasses];
+		double [] tprNew = new double[totalClasses];
+		double [][] fprNew = new double[totalClasses][totalClasses];
+		double [] tprPrev = new double[totalClasses];
+		double [][] fprPrev = new double[totalClasses][totalClasses];
+		double pPrev = 0; 
+		
+		//Test
+		for (int i = 0; i < aucList.size(); i++){
+			double pAct = aucList.get(i).getPpos();
+			if(pAct != pPrev){
+				for (int j = 0; j < totalClasses; j++){
+					if (dataset.size(j) > 0){
+						tprNew[j] = tprOk[j]/dataset.size(j);
+						for (int k = 0; k < totalClasses; k++){
+							if ((dataset.size(k) > 0)&&(j!=k)){
+								fprNew[j][k] = fprOk[j][k]/dataset.size(k);
+								aucOk[j][k] += (tprPrev[j]+tprNew[j])*(fprNew[j][k]-fprPrev[j][k])/2.0;
+								tprPrev[j] = tprNew[j];
+								fprPrev[j][k] = fprNew[j][k];
+							}
+						}
+					}	
+				}
+				pPrev = pAct;
+			}
+			if(aucList.get(i).getActCl() == aucList.get(i).getPrCl())
+				tprOk[aucList.get(i).getPrCl()]++;
+			else
+				fprOk[aucList.get(i).getPrCl()][aucList.get(i).getActCl()]++;
+		}
+
+		for (int j = 0; j < totalClasses; j++){
+			if (dataset.size(j) > 0){
+				tprNew[j] = tprOk[j]/dataset.size(j);
+				for (int k = 0; k < totalClasses; k++){
+					if ((dataset.size(k) > 0)&&(j!=k)){
+						fprNew[j][k] = fprOk[j][k]/dataset.size(k);
+						aucOk[j][k] += (tprPrev[j]+tprNew[j])*(fprNew[j][k]-fprPrev[j][k])/2.0;
+						aucOk[j][k] += (tprNew[j]+1)*(1-fprNew[j][k])/2.0;
+					}
+				}
+			}	
+		}
+
+		double aucFinal = 0;
+		int classesSuma = 0;
+		for (int j = 0; j < totalClasses; j++){
+			if (dataset.size(j) > 0){
+				for (int k = 0; k < totalClasses; k++){
+					if ((dataset.size(k) > 0)&&(j!=k)){
+						classesSuma++;
+						aucFinal += aucOk[j][k];
+					}
+				}
+			}
+		}
+		
+		return (aucFinal/classesSuma);
+	}
+	
+	public double getAUC_OnePoint(){
 		double auc = 0;
 		int totalClasses = 0;
 		for (int i = 0; i < this.confusionMatrixTst.length; i++){
@@ -557,7 +657,7 @@ public class C45 extends Algorithm {
 		return auc2;
 	}
 	
-	public double getAUCModel(){
+	public double getAUC_OnePointModel(){
 		double auc = 0;
 		int totalClasses = 0;
 		for (int i = 0; i < this.confusionMatrixModel.length; i++){
@@ -577,7 +677,7 @@ public class C45 extends Algorithm {
 		return auc2;
 	}
 	
-	public double getAUCTr(){
+	public double getAUC_OnePointTr(){
 		double auc = 0;
 		int totalClasses = 0;
 		for (int i = 0; i < this.confusionMatrixTr.length; i++){

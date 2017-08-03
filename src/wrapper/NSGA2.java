@@ -38,13 +38,14 @@ public class NSGA2 {
 
   private int popSize,evals,instances,fitness;
   private double seed, crossover, mutation;
+  private boolean weighting;
   private myDataset train;
 
   public NSGA2() {
 	   //nada
   }
   
-  public NSGA2(myDataset train, long seed, int popSize, int evals, double crossover, double mutation, int instances, int fitness) {
+  public NSGA2(myDataset train, long seed, int popSize, int evals, double crossover, double mutation, int instances, int fitness, boolean weighting) {
 	  Long prueba = new Long(seed);
 	  String cadena = prueba.toString();
 	  int zeros = cadena.length();
@@ -60,6 +61,7 @@ public class NSGA2 {
 	  this.train = train;
 	  this.instances = instances;
 	  this.fitness = fitness;
+	  this.weighting = weighting;
  }
   
   /**
@@ -94,7 +96,7 @@ public class NSGA2 {
     indicators = null ;
     PseudoRandom.setSeed(seed);
     
-    problem = new ProblemC45("Binary",train,instances,fitness);
+    problem = new ProblemC45("Binary",train,instances,fitness,weighting);
     
     algorithm = new NSGAII(problem);
     //algorithm = new ssNSGAII(problem);

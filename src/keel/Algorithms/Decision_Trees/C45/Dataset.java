@@ -444,7 +444,7 @@ public class Dataset {
 	private boolean getItemsetFull(boolean [] variables, boolean [] ejemplosIni) {
 		//fill itemset
 		boolean [] ejemplos = new boolean [IS.getNumInstances()];
-		if (ejemplosIni.length < IS.getNumInstances()){ //solo mayoritaria
+		if (ejemplosIni.length < IS.getNumInstances()){ //only majority class
 			for (int j = 0,jj = 0; j < IS.getNumInstances(); j++) {
 				if (IS.getInstance(j).getOutputNominalValues(0).equalsIgnoreCase("positive")){
 					ejemplos[j] = true;
@@ -456,20 +456,7 @@ public class Dataset {
 			ejemplos = ejemplosIni.clone();
 		}
 		for (int j = 0; j < IS.getNumInstances(); j++) {
-			//double[] itemset = new double[Attributes.getNumAttributes()];
-			/*
-			boolean entrar = false;
-			if (minority[j]){
-				entrar = true;
-				min++;
-			}else if((j-min) == ejemplos[j]){
-				entrar = true;
-			}
-			if (entrar){ //minoritaria o mayoritaria seleccionada
-			
-			*/
 			if (ejemplos[j]){
-				//System.out.println("Leo el ejemplo: "+j+"/"+IS.getNumInstances());
 				double[] itemset = new double[attributes.size()]; //?
 				// Get values for all input attributes.
 				for (int i = 0, ii = 0; i < variables.length; i++) {
@@ -527,7 +514,6 @@ public class Dataset {
 	private boolean getItemsetFull(boolean [] variables) {
 		//fill itemset
 		for (int j = 0; j < IS.getNumInstances(); j++) {
-			//double[] itemset = new double[Attributes.getNumAttributes()];
 			double[] itemset = new double[attributes.size()];
 			// Get values for all input attributes.
 			for (int i = 0, ii = 0; i < variables.length; i++) {
@@ -895,6 +881,24 @@ public class Dataset {
 		itemsets.removeElementAt(i + 1);
 		itemsets.insertElementAt(help, j);
 		itemsets.removeElementAt(j + 1);
+	}
+	
+	public void setWeights(double [] priorProbabilities){
+		int minority = (int) priorProbabilities[0];
+		for (int i = 1; i < priorProbabilities.length; i++){
+			if (minority > priorProbabilities[i]){
+				minority = (int)priorProbabilities[i];
+			}
+		}
+		double [] weights = new double[priorProbabilities.length];
+		for (int i = 0; i < weights.length; i++){
+			weights[i] = minority/priorProbabilities[i];
+		}
+		// Change the weights of the itemsets in the dataset
+        for (int i = 0; i < numItemsets(); i++) {
+        	double value = weights[(int)itemset(i).getClassValue()];
+        	itemset(i).setWeight(value);
+        }
 	}
 
 

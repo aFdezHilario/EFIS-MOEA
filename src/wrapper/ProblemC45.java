@@ -21,6 +21,7 @@ public class ProblemC45 extends Problem {
 	private int instances_ ;
 	private int fitness;
 	private myDataset train;
+	private boolean weighting; //whether to use instance weights
 
 	/**
 	 * Constructor.
@@ -28,7 +29,7 @@ public class ProblemC45 extends Problem {
 	 * @param solutionType The solution type must "Real", "BinaryReal, and "ArrayReal". 
 	 */    
 	public ProblemC45(String solutionType) throws ClassNotFoundException {
-		this(solutionType, null,0,0);
+		this(solutionType, null,0,0,false);
 	} 
 
 
@@ -38,11 +39,12 @@ public class ProblemC45 extends Problem {
 	 * @param numberOfVariables Number of variables.
 	 * @param solutionType The solution type must "BinaryReal", "BinaryReal, and "ArrayReal". 
 	 */    
-	public ProblemC45(String solutionType, myDataset train, int instances, int fitness) {
+	public ProblemC45(String solutionType, myDataset train, int instances, int fitness, boolean weighting) {
 		this.train = train;
 		this.fitness = fitness;
 		this.features_ = train.getnInputs();
 		this.instances_ = train.getnData();
+		this.weighting = weighting;
 		if (instances == Wrapper.MAJ){
 			this.instances_ = train.getMajority();
 		}
@@ -99,13 +101,18 @@ public class ProblemC45 extends Problem {
 			fx[0] = 0;
 		}else{
 			try{
-				C45 model = new C45(train,fs,is);
-				if (fitness == Wrapper.aucVal)
+				C45 model = new C45(train,fs,is,weighting);
+				if (fitness == Wrapper.aucVal){
+					model.evaluateTest();
 					fx[0] = model.getAUC();
-				else if (fitness == Wrapper.aucTrain)
+				}else if (fitness == Wrapper.aucTrain){
+					model.evaluateModel();
 					fx[0] = model.getAUCModel();
-				else
+				}
+				else{
+					model.evaluateTest();
 					fx[0] = model.getGM();
+				}
 			}catch(Exception e){
 				e.printStackTrace(System.err);;
 				System.exit(-1);
@@ -117,8 +124,6 @@ public class ProblemC45 extends Problem {
 
 		
 		// Many more combinations should be studied
-		// Additionally, the initial FARC-HD objective function must be tested, for example in synergy with AvgAcc: 
-		//	accuracy - (w1 / (ruleBase.size() - getnSelected() + 1.0)) - (5.0 * ruleBase.getUncover()) - (5.0 * ruleBase.hasClassUncovered(geneR));
 		/********************************/
 		if(fx[1] == 0) fx[0] = -Double.MAX_VALUE;
 		if(fx[0] == 0) fx[0] = -Double.MAX_VALUE;
