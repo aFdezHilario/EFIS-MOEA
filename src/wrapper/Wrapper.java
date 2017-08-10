@@ -455,7 +455,7 @@ public class Wrapper {
 					votes[maxIndex] += 1;
 				}else if (aggregation == 1){
 					for (int j = 0; j < votes.length; j++){
-						votes[j] += probs[j]*this.weightsAUC[j];
+						votes[j] += probs[j]*this.weightsAUC[i];
 					}
 				}else{
 					int maxIndex = 0;
