@@ -1,7 +1,7 @@
 algorithm = EFIS-MOEA
 
 inputData = "./data/file-tra.dat" "./data/file-tra.dat" "./data/file-tst.dat"
-outputData = "./output.tra" "./output.tst" 
+outputData = "./output.tra" "./output.tst" "./output.txt"
 
 seed = 12345678
 population size = 60
